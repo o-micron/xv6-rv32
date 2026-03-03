@@ -1,8 +1,10 @@
 # Context switch
 #
 #   void swtch(struct context *olw, struct context *new);
-# 
-# Save current registers in olw. Load from new.	
+#
+# Save current registers in olw. Load from new.
+
+.option norvc   # disable compressed instructions
 
 .globl swtch
 swtch:
@@ -35,7 +37,5 @@ swtch:
         lw s9, 44(a1)
         lw s10, 48(a1)
         lw s11, 52(a1)
-        
-        ret
 
-	
+        ret

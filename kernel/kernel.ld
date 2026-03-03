@@ -1,32 +1,34 @@
-OUTPUT_ARCH( "riscv" )
-ENTRY( _entry )
+OUTPUT_ARCH("riscv")
+ENTRY(_entry)
 
 SECTIONS
 {
-  /*
-   * ensure that entry.S / _entry is at 0x80000000,
-   * where qemu's -kernel jumps.
-   */
-  . = 0x80000000;
-  .text :
-  {
-    *(.text)
-    . = ALIGN(0x1000);
-    *(trampsec)
-  }
+    /*
+     * Single segment: everything in one continuous region
+     * starting at 0x80000000 where QEMU's -kernel jumps
+     */
+    . = 0x80000000;
 
-  . = ALIGN(0x1000);
-  PROVIDE(etext = .);
+    /* Single combined segment - everything goes here */
+    .text : {
+        *(.text)
 
-  /*
-   * make sure end is after data and bss.
-   */
-  .data : {
-    *(.data)
-  }
-  .bss : {
-    *(.bss)
-    *(.sbss*)
-     PROVIDE(end = .);
-  }
+        . = ALIGN(0x1000);
+        *(trampsec)
+
+        . = ALIGN(0x1000);
+        PROVIDE(etext = .);
+    }
+
+    .data : {
+        *(.data)
+    }
+
+    .bss : {
+        *(.bss)
+        *(.sbss*)
+
+        /* end marks the end of kernel data (used by freemem) */
+        PROVIDE(end = .);
+    }
 }

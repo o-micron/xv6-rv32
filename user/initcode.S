@@ -3,6 +3,8 @@
 
 #include "syscall.h"
 
+.option norvc   # disable compressed instructions
+
 # exec(init, argv)
 .globl start
 start:

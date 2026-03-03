@@ -23,4 +23,4 @@ _entry:
 	# jump to start() in start.c
         call start
 junk:
-        j junk
+    j junk

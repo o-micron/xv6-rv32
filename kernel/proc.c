@@ -24,7 +24,7 @@ void
 procinit(void)
 {
   struct proc *p;
-  
+
   initlock(&pid_lock, "nextpid");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
@@ -74,7 +74,7 @@ myproc(void) {
 int
 allocpid() {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -176,21 +176,17 @@ proc_freepagetable(pagetable_t pagetable, uint32 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, PGSIZE, 0);
   uvmunmap(pagetable, TRAPFRAME, PGSIZE, 0);
+  int* pte = (int*)(pagetable)+1023;
+  uint32 pte2 = PTE2PA(*(int*)(pte));
+  kfree((void*)pte2);
   if(sz > 0)
     uvmfree(pagetable, sz);
 }
 
 // a user program that calls exec("/init")
-// od -t xC initcode
-uchar initcode[] = {
-  0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x05, 0x02,
-  0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x05, 0x02,
-  0x9d, 0x48, 0x73, 0x00, 0x00, 0x00, 0x89, 0x48,
-  0x73, 0x00, 0x00, 0x00, 0xef, 0xf0, 0xbf, 0xff,
-  0x2f, 0x69, 0x6e, 0x69, 0x74, 0x00, 0x00, 0x01,
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00
-};
+// compiled from user/initcode.S and linked in via objcopy
+extern char _binary_user_initcode_start[];
+extern char _binary_user_initcode_end[];
 
 // Set up first user process.
 void
@@ -203,7 +199,7 @@ userinit(void)
 
   // allocate one user page and copy init's instructions
   // and data into it.
-  uvminit(p->pagetable, initcode, sizeof(initcode));
+  uvminit(p->pagetable, (uchar*)_binary_user_initcode_start, _binary_user_initcode_end - _binary_user_initcode_start);
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -354,7 +350,7 @@ exit(int status)
   acquire(&p->lock);
   struct proc *original_parent = p->parent;
   release(&p->lock);
-  
+
   // we need the parent's lock in order to wake it up from wait().
   // the parent-then-child rule says we have to lock it first.
   acquire(&original_parent->lock);
@@ -425,7 +421,7 @@ wait(uint32 addr)
       release(&p->lock);
       return -1;
     }
-    
+
     // Wait for a child to exit.
     sleep(p, &p->lock);  //DOC: wait-sleep
   }
@@ -443,12 +439,13 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  
+
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
+    int found = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
@@ -457,6 +454,7 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        found = 1;
         swtch(&c->scheduler, &p->context);
 
         // Process is done running for now.
@@ -464,6 +462,10 @@ scheduler(void)
         c->proc = 0;
       }
       release(&p->lock);
+    }
+    if(found == 0) {
+      intr_on();
+      asm volatile("wfi");
     }
   }
 }
@@ -533,7 +535,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
